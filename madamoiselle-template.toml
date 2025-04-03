@@ -1,0 +1,13 @@
+[discord]
+token = ""
+status = ""
+
+[places]
+db_path = ""
+log_path = ""
+
+[starboard]
+requirement = 1
+sending_channel = 0
+emoji = []
+excluded_channels = []
