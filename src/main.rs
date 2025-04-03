@@ -13,7 +13,7 @@ use log::{error, info, warn};
 use poise::{CreateReply, FrameworkError, FrameworkOptions};
 use redb::Database;
 use serenity::all::colours::css::{DANGER, WARNING};
-use serenity::all::{ClientBuilder, CreateEmbed, CreateEmbedFooter, GatewayIntents, Mentionable};
+use serenity::all::{ActivityData, ClientBuilder, CreateEmbed, CreateEmbedFooter, GatewayIntents, Mentionable, OnlineStatus};
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::Arc;
@@ -182,6 +182,8 @@ async fn main() {
         GatewayIntents::GUILDS,
     )
     .framework(poise)
+        .status(OnlineStatus::Online)
+        .activity(ActivityData::custom(user_data2.config.read().await.discord.status.clone().unwrap_or("Serving Coffee".to_string())))
     .await
     .expect("Failed to log in to discord!");
 

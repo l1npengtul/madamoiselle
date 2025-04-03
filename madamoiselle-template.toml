@@ -4,7 +4,6 @@ status = ""
 
 [places]
 db_path = ""
-log_path = ""
 
 [starboard]
 requirement = 1

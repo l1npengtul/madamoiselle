@@ -13,7 +13,7 @@ pub struct Config {
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Places {
     pub db_path: Option<PathBuf>,
-    pub log_path: Option<PathBuf>,
+    // pub log_path: Option<PathBuf>,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
