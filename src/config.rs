@@ -12,6 +12,9 @@ pub struct Config {
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
 pub struct Places {
+    // pub source_to_board_path: Option<PathBuf>,
+    // pub board_to_source_path: Option<PathBuf>,
+    // pub blacklist_path: Option<PathBuf>,
     pub db_path: Option<PathBuf>,
     // pub log_path: Option<PathBuf>,
 }
@@ -24,7 +27,7 @@ pub struct Discord {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Starboard {
-    pub requirement: i32,
+    pub requirement: u64,
     pub sending_channel: Option<u64>,
     pub emoji: Vec<String>,
     pub overrides: HashMap<u64, Override>,
@@ -47,7 +50,7 @@ impl Default for Starboard {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Override {
-    pub requirement: i32,
+    pub requirement: u64,
 }
 
 impl Default for Override {

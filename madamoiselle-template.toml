@@ -7,6 +7,6 @@ db_path = ""
 
 [starboard]
 requirement = 1
-sending_channel = 0
 emoji = []
 excluded_channels = []
+overrides = {}

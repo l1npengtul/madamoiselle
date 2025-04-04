@@ -3,6 +3,7 @@ use crate::error::Error;
 use duration_str::parse;
 use poise::{Context, CreateReply};
 use std::sync::Arc;
+use log::{info, warn};
 
 #[poise::command(
     slash_command,
@@ -37,7 +38,7 @@ pub async fn set_emoji(
 )]
 pub async fn set_requirement(
     context: Context<'_, Arc<UserData>, Error>,
-    #[description = "Global Minimum for Starboard Posting"] minimum: i32,
+    #[description = "Global Minimum for Starboard Posting"] minimum: u64,
 ) -> Result<(), Error> {
     context.data().set_requirement(minimum).await;
     context
@@ -71,7 +72,7 @@ pub async fn exclude_channel(context: Context<'_, Arc<UserData>, Error>) -> Resu
 )]
 pub async fn set_override_requirement(
     context: Context<'_, Arc<UserData>, Error>,
-    #[description = "Global Minimum for Starboard Posting"] minimum: i32,
+    #[description = "Global Minimum for Starboard Posting"] minimum: u64,
 ) -> Result<(), Error> {
     context
         .data()
@@ -132,5 +133,20 @@ pub async fn set_ignore_older_than(
         )))
         .await?;
 
+    Ok(())
+}
+
+#[poise::command(prefix_command, default_member_permissions = "ADMINISTRATOR")]
+pub async fn register(context: Context<'_, Arc<UserData>, Error>) -> Result<(), Error> {
+    warn!("registering commands!!");
+    poise::builtins::register_application_commands_buttons(context).await?;
+    Ok(())
+}
+
+#[poise::command(prefix_command, default_member_permissions = "ADMINISTRATOR")]
+pub async fn stop(context: Context<'_, Arc<UserData>, Error>) -> Result<(), Error> {
+    let _ = context.reply("LINQing myself...").await;
+    info!("going to eepy!");
+    context.data().shard_manager().write().await.clone().unwrap().shutdown_all().await;
     Ok(())
 }

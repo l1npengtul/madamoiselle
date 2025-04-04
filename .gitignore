@@ -35,3 +35,4 @@ result-*
 /target
 
 madamoiselle.toml
+*.db

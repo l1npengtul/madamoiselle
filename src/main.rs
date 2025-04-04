@@ -1,7 +1,4 @@
-use crate::commands::{
-    exclude_channel, set_emoji, set_ignore_older_than, set_override_requirement, set_requirement,
-    set_sending_channel,
-};
+use crate::commands::{exclude_channel, register, set_emoji, set_ignore_older_than, set_override_requirement, set_requirement, set_sending_channel, stop};
 use crate::config::{Config, Override};
 use crate::error::Error;
 use crate::error::Error::SetConfigErr;
@@ -10,14 +7,15 @@ use crate::message_map::MessageMap;
 use figment::Figment;
 use figment::providers::{Format, Toml};
 use log::{error, info, warn};
-use poise::{CreateReply, FrameworkError, FrameworkOptions};
+use poise::{CreateReply, FrameworkError, FrameworkOptions, PrefixFrameworkOptions};
 use redb::Database;
 use serenity::all::colours::css::{DANGER, WARNING};
-use serenity::all::{ActivityData, ClientBuilder, CreateEmbed, CreateEmbedFooter, GatewayIntents, Mentionable, OnlineStatus};
+use serenity::all::{ActivityData, ClientBuilder, CreateEmbed, CreateEmbedFooter, GatewayIntents, Mentionable, OnlineStatus, ShardManager};
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
+use serenity::cache::Settings;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
@@ -31,6 +29,7 @@ mod message_map;
 pub struct UserData {
     message_map: MessageMap,
     config: RwLock<Config>,
+    shard_manager: RwLock<Option<Arc<ShardManager>>>,
 }
 
 impl UserData {
@@ -38,11 +37,15 @@ impl UserData {
         &self.message_map
     }
 
+    pub fn shard_manager(&self) -> &RwLock<Option<Arc<ShardManager>>> {
+        &self.shard_manager
+    }
+
     pub async fn set_emoji(&self, emoji: Vec<String>) {
         self.config.write().await.starboard.emoji = emoji;
     }
 
-    pub async fn set_requirement(&self, minimum: i32) {
+    pub async fn set_requirement(&self, minimum: u64) {
         self.config.write().await.starboard.requirement = minimum;
     }
 
@@ -71,7 +74,7 @@ impl UserData {
         }
     }
 
-    pub async fn set_override_channel_requirement(&self, ovrd: u64, requirement: i32) {
+    pub async fn set_override_channel_requirement(&self, ovrd: u64, requirement: u64) {
         let mut cfg = self.config.write().await;
 
         let over = match cfg.starboard.overrides.get_mut(&ovrd) {
@@ -112,19 +115,49 @@ async fn main() {
         .extract()
         .expect("Failed to read configuration file.");
 
-    let db_path = config
+    // let source_to_board_db_path = config
+    //     .places
+    //     .source_to_board_path
+    //     .clone()
+    //     .unwrap_or_else(|| PathBuf::from("source_to_board.db"));
+    //
+    // let board_to_source_db_path = config
+    //     .places
+    //     .board_to_source_path
+    //     .clone()
+    //     .unwrap_or_else(|| PathBuf::from("board_to_source.db"));
+
+    let database_db_path = config
         .places
         .db_path
         .clone()
-        .unwrap_or_else(|| PathBuf::from("messages.db"));
-    let database = match if db_path.exists() {
-        // yes i know it is a bug if it isnt a file but idfc
-        Database::open(&db_path)
-    } else {
-        Database::create(&db_path)
-    } {
+        .unwrap_or_else(|| PathBuf::from("database.db"));
+
+    // let board_to_source_db = match Database::create(&board_to_source_db_path) {
+    //     Ok(db) => {
+    //         info!("Opened database {:?}", board_to_source_db_path);
+    //         db
+    //     }
+    //     Err(why) => {
+    //         error!("Failed to open database: {:?}", why);
+    //         exit(-1);
+    //     }
+    // };
+    //
+    // let source_to_board_db = match Database::create(&source_to_board_db_path) {
+    //     Ok(db) => {
+    //         info!("Opened database {:?}", source_to_board_db_path);
+    //         db
+    //     }
+    //     Err(why) => {
+    //         error!("Failed to open database: {:?}", why);
+    //         exit(-1);
+    //     }
+    // };
+
+    let database = match Database::create(&database_db_path) {
         Ok(db) => {
-            info!("Opened database {:?}", db_path);
+            info!("Opened database {:?}", database_db_path);
             db
         }
         Err(why) => {
@@ -144,13 +177,12 @@ async fn main() {
     let user_data = Arc::new(UserData {
         message_map,
         config: RwLock::new(config),
+        shard_manager: RwLock::new(None),
     });
     let user_data2 = user_data.clone();
 
     let poise = poise::Framework::builder()
-        .setup(move |_context, _ready, _framework| {
-            Box::into_pin(Box::new(async move { Ok(user_data) }))
-        })
+
         .options(FrameworkOptions {
             commands: vec![
                 set_emoji(),
@@ -159,6 +191,8 @@ async fn main() {
                 set_override_requirement(),
                 set_sending_channel(),
                 set_ignore_older_than(),
+                register(),
+                stop(),
             ],
             on_error: |err| Box::into_pin(Box::new(error_wrapper(err))),
             pre_command: |ctx| Box::into_pin(Box::new(pre_post_command(ctx, true))),
@@ -166,9 +200,22 @@ async fn main() {
             event_handler: |ctx, event, framework, data| {
                 Box::into_pin(Box::new(handle_event(ctx, event, framework, data)))
             },
+            prefix_options: PrefixFrameworkOptions {
+                mention_as_prefix: true,
+                ..Default::default()
+            },
             ..Default::default()
         })
+        .setup(move |_context, ready, _framework| {
+            Box::into_pin(Box::new(async move {
+                println!("Logged in as {}", ready.user.name);
+                Ok(user_data)
+            }))
+        })
         .build();
+
+    let mut cache_settings = Settings::default();
+    cache_settings.max_messages = 100;
 
     let mut client = ClientBuilder::new(
         user_data2
@@ -179,15 +226,24 @@ async fn main() {
             .token
             .as_ref()
             .expect("Expected token!"),
-        GatewayIntents::GUILDS,
+        GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT
     )
     .framework(poise)
         .status(OnlineStatus::Online)
         .activity(ActivityData::custom(user_data2.config.read().await.discord.status.clone().unwrap_or("Serving Coffee".to_string())))
-    .await
+        .cache_settings(cache_settings)
+        .await
     .expect("Failed to log in to discord!");
 
+    let _ = user_data2.shard_manager.write().await.insert(client.shard_manager.clone());
+
     client.start().await.unwrap();
+
+    let user_data3 = user_data2.clone();
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c().await.expect("Could not register ctrl+c handler");
+        user_data3.clone().shard_manager().write().await.clone().unwrap().shutdown_all().await;
+    });
 
     // shutdown
     info!("Bot Shutdown!");
@@ -283,30 +339,19 @@ async fn error_handler<U>(error: FrameworkError<'_, U, error::Error>) -> Result<
 
         FrameworkError::CommandPanic { ctx, .. } => {
             ctx.send(
-
                 CreateReply::default()
-
                     .embed(
-
                         CreateEmbed::new()
-
                             .title("Panicked")
-
                             .description("A really bad error happened and the bot panicked! You should contact a bot developer and tell them to check the logs.")
-
                             .color(DANGER),
 
                     )
-
                     .reply(true)
-
                     .ephemeral(true),
-
             )
-
                 .await?;
         }
-
         FrameworkError::ArgumentParse {
             error, input, ctx, ..
         } => {
