@@ -55,6 +55,6 @@ pub struct Override {
 
 impl Default for Override {
     fn default() -> Self {
-        Self { requirement: 4 }
+        Self { requirement: None }
     }
 }

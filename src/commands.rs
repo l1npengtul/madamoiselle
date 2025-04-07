@@ -1,9 +1,9 @@
 use crate::UserData;
 use crate::error::Error;
 use duration_str::parse;
+use log::{info, warn};
 use poise::{Context, CreateReply};
 use std::sync::Arc;
-use log::{info, warn};
 
 #[poise::command(
     slash_command,
@@ -150,6 +150,14 @@ pub async fn register(context: Context<'_, Arc<UserData>, Error>) -> Result<(), 
 pub async fn stop(context: Context<'_, Arc<UserData>, Error>) -> Result<(), Error> {
     let _ = context.reply("LINQing myself...").await;
     info!("going to eepy!");
-    context.data().shard_manager().write().await.clone().unwrap().shutdown_all().await;
+    context
+        .data()
+        .shard_manager()
+        .write()
+        .await
+        .clone()
+        .unwrap()
+        .shutdown_all()
+        .await;
     Ok(())
 }

@@ -2,7 +2,11 @@ use crate::UserData;
 use crate::error::Error;
 use log::{error, info, warn};
 use poise::FrameworkContext;
-use serenity::all::{Attachment, CacheHttp, Channel, ChannelId, Context, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, CreateMessage, EditMessage, Embed, FullEvent, Message, MessageBuilder, MessageId, MessageReaction, ReactionType, Timestamp, User};
+use serenity::all::{
+    Attachment, CacheHttp, Channel, ChannelId, Context, CreateEmbed, CreateEmbedAuthor,
+    CreateEmbedFooter, CreateMessage, EditMessage, Embed, FullEvent, Message, MessageBuilder,
+    MessageId, MessageReaction, ReactionType, Timestamp, User,
+};
 use std::ops::Sub;
 use std::sync::Arc;
 
@@ -36,7 +40,14 @@ pub async fn handle_event(
             }
         }
         FullEvent::MessageUpdate { event, new, .. } => {
-            handle_message_edit(context, data.clone(), event.id, event.channel_id, new.clone()).await?;
+            handle_message_edit(
+                context,
+                data.clone(),
+                event.id,
+                event.channel_id,
+                new.clone(),
+            )
+            .await?;
         }
         FullEvent::ReactionAdd { add_reaction } => {
             info!("handling reaction add");
@@ -60,24 +71,11 @@ pub async fn handle_event(
                 }
             };
 
-            let requirements = if let Some(Some(override_setting)) = data
-                .config
-                .read()
-                .await
-                .starboard
-                .overrides
-                .get(&add_reaction.channel_id.get().to_string())
-                .map(|requirement| requirement.requirement)
-            {
-                override_setting
-            } else {
-                data.config.read().await.starboard.requirement
-            };
-
-            let emojis = &data.config.read().await.starboard.emoji;
-
             let (mut msg_build, embed) = {
-                let message = match context.http().get_message(add_reaction.channel_id, add_reaction.message_id).await
+                let message = match context
+                    .http()
+                    .get_message(add_reaction.channel_id, add_reaction.message_id)
+                    .await
                 {
                     Ok(msg) => msg,
                     Err(why) => {
@@ -89,78 +87,82 @@ pub async fn handle_event(
                     }
                 };
 
-                info!("got message {}", message.id);
-                info!("message embeds {:?}", message.embeds);
-                // get total reactions
-                let total_reaction = message
-                    .reactions
-                    .iter()
-                    .filter(|reaction| {
-                        info!("working on reaction {:?}", reaction);
-                        match &reaction.reaction_type {
-                            ReactionType::Unicode(emj) => {
-                                info!("{:?}, {}", emojis, emj);
-                                let result = emojis.contains(emj);
-                                info!("{}", result);
-                                result
-                            },
-                            _ => false,
-                        }
-                    })
-                    .fold(0, |acc, react| { info!("react.count {} + acc {} = {}",  react.count, acc, react.count + acc); react.count + acc });
+                let requirement =
+                    get_channel_requirements(data.clone(), add_reaction.channel_id).await;
+                let message_reaction = message_reactions(
+                    &data.config.read().await.starboard.emoji,
+                    &message.reactions,
+                );
 
-                if total_reaction < requirements {
-                    info!("not enough reactions on message {} to add to starboard: {}<{}", add_reaction.message_id, total_reaction, requirements)
+                if message_reaction < requirement {
+                    info!(
+                        "not enough reactions on message {} to add to starboard: {}<{}",
+                        add_reaction.message_id.get(),
+                        message_reaction,
+                        requirement
+                    );
+                    return Ok(());
                 }
 
-
-                    create_new_starboard_embed_message(
-                        &message.reactions,
-                        &message.link(),
-                        &message.author,
-                        &message.content,
-                        &message.attachments,
-                        &message.embeds,
-                        &message.timestamp,
-                        message.id,
-                    )
+                create_new_starboard_embed_message(
+                    &message.reactions,
+                    &message.link(),
+                    &message.author,
+                    &message.content,
+                    &message.attachments,
+                    &message.embeds,
+                    &message.timestamp,
+                    message.id,
+                )
             };
 
-                if let Some(board) = data
-                    .message_map
-                    .original_to_board(add_reaction.message_id.get())?
+            if let Some(board) = data
+                .message_map
+                .original_to_board(add_reaction.message_id.get())?
+            {
+                info!(
+                    "updating board message {} from reaction added to {}/{}",
+                    board, add_reaction.channel_id, add_reaction.message_id
+                );
+
+                let mut board_message = context
+                    .http()
+                    .get_message(sending_channel.into(), board.into())
+                    .await?;
+
+                let new_message = EditMessage::new().content(msg_build.build()).embed(embed);
+
+                board_message.edit(context, new_message).await?;
+
+                return Ok(());
+            } else {
+                // create new board message
+                info!(
+                    "creating new board message from reaction added to {}/{}",
+                    add_reaction.channel_id, add_reaction.message_id
+                );
+
+                let new_message = CreateMessage::new().content(msg_build.build()).embed(embed);
+
+                if let Channel::Guild(guild_ch) =
+                    context.http().get_channel(sending_channel.into()).await?
                 {
+                    info!("sending message to #{} ({})", guild_ch.name, guild_ch.id);
+                    let sent = guild_ch.send_message(context, new_message).await?;
+                    data.message_map
+                        .record_new(add_reaction.message_id.get(), sent.id.get())?;
                     info!(
-                        "updating board message {} from reaction added to {}/{}",
-                        board, add_reaction.channel_id, add_reaction.message_id
+                        "sent message {} to #{}, logged sucessfully!",
+                        sent.id, guild_ch.name
                     );
-
-                    let mut board_message = context
-                        .http()
-                        .get_message(sending_channel.into(), board.into())
-                        .await?;
-
-                    let new_message = EditMessage::new().content(msg_build.build()).embed(embed);
-
-                    board_message.edit(context, new_message).await?;
-
-                    return Ok(());
                 } else {
-                    // create new board message
-                    info!("creating new board message from reaction added to {}/{}",add_reaction.channel_id, add_reaction.message_id);
-
-                    let new_message = CreateMessage::new().content(msg_build.build()).embed(embed);
-
-                    if let Channel::Guild(guild_ch) = context.http().get_channel(sending_channel.into()).await? {
-                        info!("sending message to #{} ({})", guild_ch.name, guild_ch.id);
-                        let sent = guild_ch.send_message(context, new_message).await?;
-                        data.message_map.record_new(add_reaction.message_id.get(), sent.id.get())?;
-                        info!("sent message {} to #{}, logged sucessfully!", sent.id, guild_ch.name);
-                    } else {
-                        error!("failed to get channel - {} is not guild channel", sending_channel);
-                        return Ok(())
-                    }
+                    error!(
+                        "failed to get channel - {} is not guild channel",
+                        sending_channel
+                    );
+                    return Ok(());
                 }
+            }
         }
         FullEvent::Ready { data_about_bot } => {
             info!(
@@ -177,7 +179,12 @@ pub async fn handle_event(
             return Ok(());
         }
         FullEvent::Ratelimit { data } => {
-            warn!("Ratelimited {}! for {} seconds, is global: {}", data.path, data.timeout.as_secs(), data.global);
+            warn!(
+                "Ratelimited {}! for {} seconds, is global: {}",
+                data.path,
+                data.timeout.as_secs(),
+                data.global
+            );
             return Ok(());
         }
         _ => return Ok(()),
@@ -228,7 +235,10 @@ pub async fn should_ignore_event(
     if let Some(older_than) = data.config.read().await.starboard.ignore_older_than {
         let older_time_stamp = Timestamp::now().to_utc().sub(older_than);
         if message_got.timestamp.to_utc() < older_time_stamp {
-            info!("ignoring message {:?}/{:?} - too old!", channel, message_got.id);
+            info!(
+                "ignoring message {:?}/{:?} - too old!",
+                channel, message_got.id
+            );
             return Ok(true);
         }
     }
@@ -249,10 +259,24 @@ pub async fn handle_message_edit(
 
     let original_edited_message = match new_msg {
         Some(m) => m,
-        None => {
-            context.http().get_message(channel, message).await?
-        }
+        None => context.http().get_message(channel, message).await?,
     };
+
+    let requirement = get_channel_requirements(data.clone(), channel.clone()).await;
+    let message_reaction = message_reactions(
+        &data.config.read().await.starboard.emoji,
+        &original_edited_message.reactions,
+    );
+
+    if message_reaction < requirement {
+        info!(
+            "not enough reactions on message {} to add to starboard: {}<{}",
+            message.get(),
+            message_reaction,
+            requirement
+        );
+        return Ok(());
+    }
 
     // see if we have this message logged
     if let Some(board) = data.message_map.original_to_board(message.get())? {
@@ -330,15 +354,21 @@ pub async fn handle_message_deletion(
         data.message_map.remove_record_board(board)?;
         let message = match context
             .http()
-            .get_message(data.config.read().await.starboard.sending_channel.unwrap_or_default().into(), board.into())
+            .get_message(
+                data.config
+                    .read()
+                    .await
+                    .starboard
+                    .sending_channel
+                    .unwrap_or_default()
+                    .into(),
+                board.into(),
+            )
             .await
         {
             Ok(msg) => msg,
             Err(why) => {
-                error!(
-                            "failed to get message {}/{} - {}.",
-                            channel, message, why
-                        );
+                error!("failed to get message {}/{} - {}.", channel, message, why);
                 return Ok(());
             }
         };
@@ -395,20 +425,27 @@ pub fn create_new_starboard_embed_message(
     {
         embed = embed.image(&img_attachment.url);
     } else {
-        if let Some(Some(image_embed)) = msg_embeds.iter().filter(|embed| embed.image.is_some()).nth(0).map(|embed| &embed.image) {
+        if let Some(Some(image_embed)) = msg_embeds
+            .iter()
+            .filter(|embed| embed.image.is_some())
+            .nth(0)
+            .map(|embed| &embed.image)
+        {
             info!("got embed image: {}", image_embed.url);
             embed = embed.image(&image_embed.url);
         }
 
-        if let Some(Some(embed_thumbnail)) =  msg_embeds.iter().filter(|embed| embed.thumbnail.is_some()).nth(0).map(|x| &x.thumbnail) {
+        if let Some(Some(embed_thumbnail)) = msg_embeds
+            .iter()
+            .filter(|embed| embed.thumbnail.is_some())
+            .nth(0)
+            .map(|x| &x.thumbnail)
+        {
             info!("got embed thumbnail: {}", embed_thumbnail.url);
             embed = embed.image(&embed_thumbnail.url);
         }
 
-
-
         info!("looking for embed images...");
-
     }
 
     embed = embed
@@ -466,5 +503,37 @@ fn truncate(s: &str, max_chars: usize) -> &str {
     match s.char_indices().nth(max_chars) {
         None => s,
         Some((idx, _)) => &s[..idx],
+    }
+}
+
+fn message_reactions(allow_emojis: &[String], message_reactions: &[MessageReaction]) -> u64 {
+    let total_reaction = message_reactions
+        .iter()
+        .filter(|reaction| match &reaction.reaction_type {
+            ReactionType::Unicode(emj) => {
+                info!("{:?}, {}", allow_emojis, emj);
+                let result = allow_emojis.contains(emj);
+                info!("{}", result);
+                result
+            }
+            _ => false,
+        })
+        .fold(0, |acc, react| react.count + acc);
+    total_reaction
+}
+
+async fn get_channel_requirements(data: Arc<UserData>, channel: ChannelId) -> u64 {
+    if let Some(Some(override_setting)) = data
+        .config
+        .read()
+        .await
+        .starboard
+        .overrides
+        .get(&channel.get().to_string())
+        .map(|requirement| requirement.requirement)
+    {
+        override_setting
+    } else {
+        data.config.read().await.starboard.requirement
     }
 }

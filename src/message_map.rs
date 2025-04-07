@@ -1,5 +1,5 @@
-use log::{error, info};
 use crate::error::Error;
+use log::{error, info};
 use redb::{Database, TableDefinition};
 
 type OriginalMessage = u64;
@@ -98,7 +98,6 @@ impl MessageMap {
             Some(b) => b,
             None => return Ok(()),
         };
-
 
         let write_trans = self.database.begin_write()?;
         {

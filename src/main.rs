@@ -1,4 +1,7 @@
-use crate::commands::{exclude_channel, register, set_emoji, set_ignore_older_than, set_override_requirement, set_requirement, set_sending_channel, stop};
+use crate::commands::{
+    exclude_channel, register, set_emoji, set_ignore_older_than, set_override_requirement,
+    set_requirement, set_sending_channel, stop,
+};
 use crate::config::{Config, Override};
 use crate::error::Error;
 use crate::error::Error::SetConfigErr;
@@ -10,12 +13,15 @@ use log::{error, info, warn};
 use poise::{CreateReply, FrameworkError, FrameworkOptions, PrefixFrameworkOptions};
 use redb::Database;
 use serenity::all::colours::css::{DANGER, WARNING};
-use serenity::all::{ActivityData, ClientBuilder, CreateEmbed, CreateEmbedFooter, GatewayIntents, Mentionable, OnlineStatus, ShardManager};
+use serenity::all::{
+    ActivityData, ClientBuilder, CreateEmbed, CreateEmbedFooter, GatewayIntents, Mentionable,
+    OnlineStatus, ShardManager,
+};
+use serenity::cache::Settings;
 use std::path::PathBuf;
 use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
-use serenity::cache::Settings;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
@@ -81,7 +87,9 @@ impl UserData {
         let over = match cfg.starboard.overrides.get_mut(&override_string) {
             Some(v) => v,
             None => {
-                cfg.starboard.overrides.insert(override_string.clone(), Override::default());
+                cfg.starboard
+                    .overrides
+                    .insert(override_string.clone(), Override::default());
                 cfg.starboard.overrides.get_mut(&override_string).unwrap()
             }
         };
@@ -95,14 +103,13 @@ impl UserData {
 
     pub async fn write_config_to_disk(&self) -> Result<(), Error> {
         warn!("getting current config");
-        let config =
-            match toml::to_string(&self.config.read().await.clone()) {
-                Ok(cfg) => cfg,
-                Err(why) => {
-                    error!("error getting config: {}", why);
-                    return Err(SetConfigErr);
-                }
-            };
+        let config = match toml::to_string(&self.config.read().await.clone()) {
+            Ok(cfg) => cfg,
+            Err(why) => {
+                error!("error getting config: {}", why);
+                return Err(SetConfigErr);
+            }
+        };
         warn!("writing new file");
         let mut file = File::create("madamoiselle.toml")
             .await
@@ -192,7 +199,6 @@ async fn main() {
     let user_data2 = user_data.clone();
 
     let poise = poise::Framework::builder()
-
         .options(FrameworkOptions {
             commands: vec![
                 set_emoji(),
@@ -236,23 +242,46 @@ async fn main() {
             .token
             .as_ref()
             .expect("Expected token!"),
-        GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT
+        GatewayIntents::non_privileged() | GatewayIntents::MESSAGE_CONTENT,
     )
     .framework(poise)
-        .status(OnlineStatus::Online)
-        .activity(ActivityData::custom(user_data2.config.read().await.discord.status.clone().unwrap_or("Serving Coffee".to_string())))
-        .cache_settings(cache_settings)
-        .await
+    .status(OnlineStatus::Online)
+    .activity(ActivityData::custom(
+        user_data2
+            .config
+            .read()
+            .await
+            .discord
+            .status
+            .clone()
+            .unwrap_or("Serving Coffee".to_string()),
+    ))
+    .cache_settings(cache_settings)
+    .await
     .expect("Failed to log in to discord!");
 
-    let _ = user_data2.shard_manager.write().await.insert(client.shard_manager.clone());
+    let _ = user_data2
+        .shard_manager
+        .write()
+        .await
+        .insert(client.shard_manager.clone());
 
     client.start().await.unwrap();
 
     let user_data3 = user_data2.clone();
     tokio::spawn(async move {
-        tokio::signal::ctrl_c().await.expect("Could not register ctrl+c handler");
-        user_data3.clone().shard_manager().write().await.clone().unwrap().shutdown_all().await;
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Could not register ctrl+c handler");
+        user_data3
+            .clone()
+            .shard_manager()
+            .write()
+            .await
+            .clone()
+            .unwrap()
+            .shutdown_all()
+            .await;
     });
 
     // shutdown
