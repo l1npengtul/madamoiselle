@@ -21,10 +21,13 @@ pub async fn set_emoji(
         .map(|x| x.to_string())
         .collect::<Vec<String>>();
 
+    context.data().config.write().await.starboard.emoji = emoji_list.clone();
+    context.data().write_config_to_disk().await?;
+
     context
         .send(CreateReply::default().content(format!(
             "Successfully added emojis to bot: {:?}",
-            &emoji_list
+            emoji_list
         )))
         .await?;
 
