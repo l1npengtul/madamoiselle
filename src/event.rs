@@ -60,15 +60,16 @@ pub async fn handle_event(
                 }
             };
 
-            let requirements = if let Some(override_setting) = data
+            let requirements = if let Some(Some(override_setting)) = data
                 .config
                 .read()
                 .await
                 .starboard
                 .overrides
                 .get(&add_reaction.channel_id.get().to_string())
+                .map(|requirement| requirement.requirement)
             {
-                override_setting.requirement
+                override_setting
             } else {
                 data.config.read().await.starboard.requirement
             };

@@ -86,7 +86,7 @@ impl UserData {
             }
         };
 
-        over.requirement = requirement;
+        over.requirement = Some(requirement);
     }
 
     pub async fn set_older_ignore(&self, duration: Duration) {

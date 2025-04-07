@@ -50,7 +50,7 @@ impl Default for Starboard {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Override {
-    pub requirement: u64,
+    pub requirement: Option<u64>,
 }
 
 impl Default for Override {
