@@ -76,12 +76,13 @@ impl UserData {
 
     pub async fn set_override_channel_requirement(&self, ovrd: u64, requirement: u64) {
         let mut cfg = self.config.write().await;
+        let override_string = ovrd.to_string();
 
-        let over = match cfg.starboard.overrides.get_mut(&ovrd) {
+        let over = match cfg.starboard.overrides.get_mut(&override_string) {
             Some(v) => v,
             None => {
-                cfg.starboard.overrides.insert(ovrd, Override::default());
-                cfg.starboard.overrides.get_mut(&ovrd).unwrap()
+                cfg.starboard.overrides.insert(override_string.clone(), Override::default());
+                cfg.starboard.overrides.get_mut(&override_string).unwrap()
             }
         };
 
@@ -93,11 +94,20 @@ impl UserData {
     }
 
     pub async fn write_config_to_disk(&self) -> Result<(), Error> {
+        warn!("getting current config");
         let config =
-            toml::to_string(&self.config.read().await.clone()).map_err(|_| SetConfigErr)?;
+            match toml::to_string(&self.config.read().await.clone()) {
+                Ok(cfg) => cfg,
+                Err(why) => {
+                    error!("error getting config: {}", why);
+                    return Err(SetConfigErr);
+                }
+            };
+        warn!("writing new file");
         let mut file = File::create("madamoiselle.toml")
             .await
             .map_err(|_| SetConfigErr)?;
+        warn!("writing data to file");
         file.write_all(config.as_bytes())
             .await
             .map_err(|_| SetConfigErr)?;

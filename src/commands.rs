@@ -72,7 +72,7 @@ pub async fn exclude_channel(context: Context<'_, Arc<UserData>, Error>) -> Resu
 )]
 pub async fn set_override_requirement(
     context: Context<'_, Arc<UserData>, Error>,
-    #[description = "Global Minimum for Starboard Posting"] minimum: u64,
+    #[description = "Local Channel Minimum for Starboard Posting"] minimum: u64,
 ) -> Result<(), Error> {
     context
         .data()

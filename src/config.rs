@@ -30,7 +30,7 @@ pub struct Starboard {
     pub requirement: u64,
     pub sending_channel: Option<u64>,
     pub emoji: Vec<String>,
-    pub overrides: HashMap<u64, Override>,
+    pub overrides: HashMap<String, Override>,
     pub excluded_channels: Vec<u64>,
     pub ignore_older_than: Option<Duration>,
 }

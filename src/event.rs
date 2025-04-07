@@ -66,7 +66,7 @@ pub async fn handle_event(
                 .await
                 .starboard
                 .overrides
-                .get(&add_reaction.channel_id.get())
+                .get(&add_reaction.channel_id.get().to_string())
             {
                 override_setting.requirement
             } else {

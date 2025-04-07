@@ -1,6 +1,6 @@
 [package]
 name = "madamoiselle"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2024"
 
 [dependencies]
@@ -9,7 +9,6 @@ log = "0.4.27"
 env_logger = "0.11.7"
 thiserror = "2.0"
 toml = "0.8.20"
-chrono = "0.4.40"
 duration-str = "0.17.0"
 
 [dependencies.tokio]
