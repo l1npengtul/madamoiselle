@@ -1,7 +1,6 @@
 use crate::UserData;
 use crate::error::Error;
 use duration_str::parse;
-use log::{info, warn};
 use poise::{Context, CreateReply};
 use std::sync::Arc;
 
@@ -136,28 +135,5 @@ pub async fn set_ignore_older_than(
         )))
         .await?;
 
-    Ok(())
-}
-
-#[poise::command(prefix_command, default_member_permissions = "ADMINISTRATOR")]
-pub async fn register(context: Context<'_, Arc<UserData>, Error>) -> Result<(), Error> {
-    warn!("registering commands!!");
-    poise::builtins::register_application_commands_buttons(context).await?;
-    Ok(())
-}
-
-#[poise::command(prefix_command, default_member_permissions = "ADMINISTRATOR")]
-pub async fn stop(context: Context<'_, Arc<UserData>, Error>) -> Result<(), Error> {
-    let _ = context.reply("LINQing myself...").await;
-    info!("going to eepy!");
-    context
-        .data()
-        .shard_manager()
-        .write()
-        .await
-        .clone()
-        .unwrap()
-        .shutdown_all()
-        .await;
     Ok(())
 }

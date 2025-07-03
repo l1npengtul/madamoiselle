@@ -1,13 +1,22 @@
 use crate::UserData;
+use crate::commands::modmail::{
+    CREATE_SELECT_MENU_ID, ModmailOpenReason, ModmailThread, create_interaction_menu,
+    waitress_embed,
+};
 use crate::error::Error;
+use base64::Engine;
+use chrono::Utc;
 use log::{error, info, warn};
 use poise::FrameworkContext;
 use serenity::all::{
-    Attachment, CacheHttp, Channel, ChannelId, Context, CreateEmbed, CreateEmbedAuthor,
-    CreateEmbedFooter, CreateMessage, EditMessage, Embed, FullEvent, Message, MessageBuilder,
-    MessageId, MessageReaction, ReactionType, Timestamp, User,
+    Attachment, CacheHttp, Channel, ChannelId, ComponentInteraction, ComponentInteractionDataKind,
+    Context, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, CreateInteractionResponse,
+    CreateInteractionResponseMessage, CreateMessage, CreateThread, EditMessage, Embed, FullEvent,
+    Interaction, Message, MessageBuilder, MessageId, MessageReaction, ReactionType, RoleId,
+    Timestamp, User,
 };
 use std::ops::Sub;
+use std::str::FromStr;
 use std::sync::Arc;
 
 pub async fn handle_event(
@@ -117,8 +126,9 @@ pub async fn handle_event(
             };
 
             if let Some(board) = data
-                .message_map
-                .original_to_board(add_reaction.message_id.get())?
+                .database
+                .original_to_board(add_reaction.message_id.get())
+                .await?
             {
                 info!(
                     "updating board message {} from reaction added to {}/{}",
@@ -149,8 +159,9 @@ pub async fn handle_event(
                 {
                     info!("sending message to #{} ({})", guild_ch.name, guild_ch.id);
                     let sent = guild_ch.send_message(context, new_message).await?;
-                    data.message_map
-                        .record_new(add_reaction.message_id.get(), sent.id.get())?;
+                    data.database
+                        .record_new(add_reaction.message_id.get(), sent.id.get())
+                        .await?;
                     info!(
                         "sent message {} to #{}, logged sucessfully!",
                         sent.id, guild_ch.name
@@ -161,6 +172,13 @@ pub async fn handle_event(
                         sending_channel
                     );
                     return Ok(());
+                }
+            }
+        }
+        FullEvent::InteractionCreate { interaction } => {
+            if let Interaction::Component(component) = interaction {
+                if &component.data.custom_id == CREATE_SELECT_MENU_ID {
+                    create_new_modmail_thread_channel(context, data.clone(), component).await?;
                 }
             }
         }
@@ -199,10 +217,10 @@ pub async fn should_ignore_event(
     message: &MessageId,
     channel: &ChannelId,
 ) -> Result<bool, Error> {
-    if data.message_map.is_blacklisted(message.get())? {
-        info!("message blacklisted ignoring,");
-        return Ok(true);
-    }
+    // if data.database.is_blacklisted(message.get())? {
+    //     info!("message blacklisted ignoring,");
+    //     return Ok(true);
+    // }
 
     let sending_channel = match data.config.read().await.starboard.sending_channel {
         Some(ch) => ch,
@@ -279,7 +297,7 @@ pub async fn handle_message_edit(
     }
 
     // see if we have this message logged
-    if let Some(board) = data.message_map.original_to_board(message.get())? {
+    if let Some(board) = data.database.original_to_board(message.get()).await? {
         info!("Source message {} edited, updating message.", message.get());
 
         let sending_channel = match data.config.read().await.starboard.sending_channel {
@@ -330,28 +348,20 @@ pub async fn handle_message_deletion(
     message: &MessageId,
     channel: &ChannelId,
 ) -> Result<(), Error> {
-    if data.message_map.is_blacklisted(message.get())? {
-        data.message_map.unblacklist(message.get())?;
-    }
+    // if data.database.is_blacklisted(message.get())? {
+    //     data.database.unblacklist(message.get())?;
+    // }
 
     if should_ignore_event(context, data.clone(), message, channel).await? {
         return Ok(());
     }
 
-    // check if message is logged
-    if let Some(orig) = data.message_map.board_to_original(message.get())? {
-        info!(
-            "Starboard message {} deleted, stopping tracking of this message.",
-            message.get()
-        );
-        data.message_map.blacklist(orig)?;
-    }
-    if let Some(board) = data.message_map.original_to_board(message.get())? {
+    if let Some(board) = data.database.original_to_board(message.get()).await? {
         info!(
             "Source message {} deleted, stopping tracking of this message.",
             message.get()
         );
-        data.message_map.remove_record_board(board)?;
+        data.database.remove_record_board(board).await?;
         let message = match context
             .http()
             .get_message(
@@ -536,4 +546,129 @@ async fn get_channel_requirements(data: Arc<UserData>, channel: ChannelId) -> u6
     } else {
         data.config.read().await.starboard.requirement
     }
+}
+
+async fn create_new_modmail_thread_channel(
+    context: &Context,
+    data: Arc<UserData>,
+    component: &ComponentInteraction,
+) -> Result<(), Error> {
+    crate::log_channel(
+        context,
+        &data,
+        format!("handling create modmail for user {}", component.user.id),
+    )
+    .await;
+    let modmail_reason = match &component.data.kind {
+        ComponentInteractionDataKind::StringSelect { values } => {
+            if values.len() > 1 || values.len() == 0 {
+                return Err(Error::BadInteraction);
+            }
+            ModmailOpenReason::from_str(&values[0])?
+        }
+        _ => {
+            crate::log_channel(
+                context,
+                &data,
+                format!("??? invalid select type for {}", component.user.id),
+            )
+            .await;
+            return Err(Error::BadInteraction);
+        }
+    };
+    let guild_channel = context
+        .http()
+        .get_channel(component.channel_id)
+        .await?
+        .guild()
+        .ok_or(Error::NotFound)?;
+    let name = format!(
+        "{}_{}-{}",
+        component.user.name,
+        modmail_reason,
+        base64::prelude::BASE64_STANDARD.encode(Utc::now().timestamp().to_le_bytes())
+    );
+    let thread = guild_channel
+        .create_thread(
+            context.http(),
+            CreateThread::new(name)
+                .audit_log_reason(&modmail_reason.to_string())
+                .invitable(false),
+        )
+        .await?;
+    thread
+        .id
+        .add_thread_member(context.http(), component.user.id)
+        .await?;
+
+    let modmail = ModmailThread::new(
+        thread.id,
+        component.user.id,
+        component.id.created_at().unix_timestamp(),
+        modmail_reason,
+    );
+    data.database.create_new_modmail(&modmail).await?;
+
+    let bot_pfp = context
+        .http()
+        .get_current_user()
+        .await?
+        .default_avatar_url();
+
+    component
+        .create_response(
+            context.http(),
+            CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content(format!(
+                        "Your modmail has been opened here: <#{}>",
+                        modmail.thread_id.get()
+                    ))
+                    .ephemeral(true),
+            ),
+        )
+        .await?;
+
+    let roles = data
+        .config
+        .read()
+        .await
+        .modmail
+        .roles
+        .iter()
+        .map(|id| RoleId::new(*id))
+        .map(|role_id| format!("<@&{}>", role_id.get()))
+        .collect::<Vec<String>>()
+        .join(", ");
+    let user = format!("<@{}>", component.user.id.get());
+    thread.send_message(context.http(), CreateMessage::new()
+        .add_embed(CreateEmbed::new()
+            .title("Welcome to the Madamoiselle Cafe")
+            .description(format!("Please await to be seated. Your ticket for {} will be dealt with soon. We will bring out your complementary Flesh Coffee very soon. Note: You can use /resolve to close this modmail.", modmail_reason))
+            .color((236, 212, 0))
+            .author(CreateEmbedAuthor::from(&component.user))
+            .footer(CreateEmbedFooter::new("MADAMOISELLE CAFE - SERVING FLESH COFFEE EST. 2018").icon_url(&bot_pfp)))
+        .content(format!("{} {}", roles, user))).await?;
+    // reset
+    let mut component_msg = component.message.clone();
+    component_msg
+        .edit(
+            context.http(),
+            EditMessage::new()
+                .embed(waitress_embed(&bot_pfp))
+                .select_menu(create_interaction_menu()),
+        )
+        .await?;
+    crate::log_channel(
+        context,
+        &data,
+        format!(
+            "Created modmail <#{}> for user {}, reason {}",
+            modmail.thread_id.get(),
+            user,
+            modmail_reason
+        ),
+    )
+    .await;
+    Ok(())
 }

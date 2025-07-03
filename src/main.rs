@@ -1,46 +1,42 @@
-use crate::commands::{
-    exclude_channel, register, set_emoji, set_ignore_older_than, set_override_requirement,
-    set_requirement, set_sending_channel, stop,
-};
+use crate::commands::{board, modmail, ping, register, stop};
 use crate::config::{Config, Override};
+use crate::database::Database;
 use crate::error::Error;
 use crate::error::Error::SetConfigErr;
 use crate::event::handle_event;
-use crate::message_map::MessageMap;
 use figment::Figment;
 use figment::providers::{Format, Toml};
 use log::{error, info, warn};
 use poise::{CreateReply, FrameworkError, FrameworkOptions, PrefixFrameworkOptions};
-use redb::Database;
 use serenity::all::colours::css::{DANGER, WARNING};
 use serenity::all::{
-    ActivityData, ClientBuilder, CreateEmbed, CreateEmbedFooter, GatewayIntents, Mentionable,
-    OnlineStatus, ShardManager,
+    ActivityData, CacheHttp, ChannelId, ClientBuilder, Context, CreateEmbed, CreateEmbedFooter,
+    CreateMessage, GatewayIntents, Mentionable, OnlineStatus, ShardManager,
 };
 use serenity::cache::Settings;
-use std::path::PathBuf;
-use std::process::exit;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::fs::File;
 use tokio::io::AsyncWriteExt;
+use tokio::select;
+use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::RwLock;
 
-mod commands;
+pub mod commands;
 mod config;
+mod database;
 mod error;
 mod event;
-mod message_map;
 
 pub struct UserData {
-    message_map: MessageMap,
+    database: Database,
     config: RwLock<Config>,
     shard_manager: RwLock<Option<Arc<ShardManager>>>,
 }
 
 impl UserData {
-    pub fn message_map(&self) -> &MessageMap {
-        &self.message_map
+    pub fn message_map(&self) -> &Database {
+        &self.database
     }
 
     pub fn shard_manager(&self) -> &RwLock<Option<Arc<ShardManager>>> {
@@ -101,6 +97,29 @@ impl UserData {
         self.config.write().await.starboard.ignore_older_than = Some(duration);
     }
 
+    pub async fn set_modmail_send_channel(&self, channel: u64) {
+        let mut cfg = self.config.write().await;
+        cfg.modmail.channel = Some(channel);
+    }
+    pub async fn set_modmail_bot_message(&self, bot_message: u64) {
+        let mut cfg = self.config.write().await;
+        cfg.modmail.bot_message = Some(bot_message);
+    }
+    pub async fn clear_modmail_bot_message(&self) {
+        let mut cfg = self.config.write().await;
+        cfg.modmail.bot_message = None;
+    }
+    pub async fn set_modmail_log_channel(&self, channel: u64) {
+        let mut cfg = self.config.write().await;
+        cfg.modmail.log_channel = Some(channel);
+    }
+
+    pub async fn set_modmail_roles(&self, roles: Vec<u64>) {
+        let mut cfg = self.config.write().await;
+        cfg.modmail.roles = roles;
+        warn!("aaaaaa");
+    }
+
     pub async fn write_config_to_disk(&self) -> Result<(), Error> {
         warn!("getting current config");
         let config = match toml::to_string(&self.config.read().await.clone()) {
@@ -132,81 +151,38 @@ async fn main() {
         .extract()
         .expect("Failed to read configuration file.");
 
-    // let source_to_board_db_path = config
-    //     .places
-    //     .source_to_board_path
-    //     .clone()
-    //     .unwrap_or_else(|| PathBuf::from("source_to_board.db"));
-    //
-    // let board_to_source_db_path = config
-    //     .places
-    //     .board_to_source_path
-    //     .clone()
-    //     .unwrap_or_else(|| PathBuf::from("board_to_source.db"));
-
     let database_db_path = config
         .places
         .db_path
         .clone()
-        .unwrap_or_else(|| PathBuf::from("database.db"));
-
-    // let board_to_source_db = match Database::create(&board_to_source_db_path) {
-    //     Ok(db) => {
-    //         info!("Opened database {:?}", board_to_source_db_path);
-    //         db
-    //     }
-    //     Err(why) => {
-    //         error!("Failed to open database: {:?}", why);
-    //         exit(-1);
-    //     }
-    // };
-    //
-    // let source_to_board_db = match Database::create(&source_to_board_db_path) {
-    //     Ok(db) => {
-    //         info!("Opened database {:?}", source_to_board_db_path);
-    //         db
-    //     }
-    //     Err(why) => {
-    //         error!("Failed to open database: {:?}", why);
-    //         exit(-1);
-    //     }
-    // };
-
-    let database = match Database::create(&database_db_path) {
-        Ok(db) => {
-            info!("Opened database {:?}", database_db_path);
-            db
-        }
-        Err(why) => {
-            error!("Failed to open database: {:?}", why);
-            exit(-1);
-        }
-    };
-
-    let message_map = match MessageMap::new(database) {
-        Ok(mm) => mm,
-        Err(why) => {
-            error!("Failed to open database: {:?}", why);
-            exit(-1);
-        }
-    };
+        .unwrap_or_else(|| "database.sqlite".to_string());
 
     let user_data = Arc::new(UserData {
-        message_map,
+        database: Database::new(database_db_path).await.unwrap(),
         config: RwLock::new(config),
         shard_manager: RwLock::new(None),
     });
+
     let user_data2 = user_data.clone();
 
     let poise = poise::Framework::builder()
         .options(FrameworkOptions {
             commands: vec![
-                set_emoji(),
-                set_requirement(),
-                exclude_channel(),
-                set_override_requirement(),
-                set_sending_channel(),
-                set_ignore_older_than(),
+                board::set_emoji(),
+                board::set_requirement(),
+                board::exclude_channel(),
+                board::set_override_requirement(),
+                board::set_sending_channel(),
+                board::set_ignore_older_than(),
+                modmail::set_log_channel(),
+                modmail::set_modmail_channel(),
+                modmail::modmail_auto_roles(),
+                modmail::modmail_add_role(),
+                modmail::modmail_remove_role(),
+                modmail::resolve(),
+                modmail::mark_resolved(),
+                modmail::mark_wontfix(),
+                ping(),
                 register(),
                 stop(),
             ],
@@ -218,6 +194,7 @@ async fn main() {
             },
             prefix_options: PrefixFrameworkOptions {
                 mention_as_prefix: true,
+                prefix: Some("c!".to_string()),
                 ..Default::default()
             },
             ..Default::default()
@@ -259,34 +236,46 @@ async fn main() {
     .cache_settings(cache_settings)
     .await
     .expect("Failed to log in to discord!");
-
-    let _ = user_data2
-        .shard_manager
-        .write()
-        .await
-        .insert(client.shard_manager.clone());
-
-    client.start().await.unwrap();
+    {
+        let _ = user_data2
+            .shard_manager
+            .write()
+            .await
+            .insert(client.shard_manager.clone());
+    }
 
     let user_data3 = user_data2.clone();
     tokio::spawn(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Could not register ctrl+c handler");
-        user_data3
-            .clone()
-            .shard_manager()
+        let data = user_data3;
+        let mut signal = signal(SignalKind::terminate()).unwrap();
+        select!(
+            _ = tokio::signal::ctrl_c() => {
+                shutdown_stuff(data).await;
+            }
+            _ = signal.recv() => {
+                shutdown_stuff(data).await;
+            }
+        );
+        info!("Bot Shutdown!");
+    });
+    client.start().await.unwrap();
+}
+
+async fn shutdown_stuff(data: Arc<UserData>) {
+    warn!("shutdown!");
+    data.database.shutdown().await;
+    {
+        if let Err(why) = data.write_config_to_disk().await {
+            error!("failed to write config: {}", why)
+        }
+        data.shard_manager()
             .write()
             .await
             .clone()
             .unwrap()
             .shutdown_all()
             .await;
-    });
-
-    // shutdown
-    info!("Bot Shutdown!");
-    user_data2.write_config_to_disk().await.unwrap();
+    }
 }
 
 async fn pre_post_command<U>(context: poise::Context<'_, U, Error>, pre: bool) {
@@ -720,4 +709,21 @@ async fn error_handler<U>(error: FrameworkError<'_, U, error::Error>) -> Result<
     }
 
     Ok(())
+}
+
+pub async fn log_channel(context: &Context, data: &Arc<UserData>, log: String) {
+    let id = match data.config.read().await.modmail.log_channel {
+        Some(i) => i,
+        None => return,
+    };
+    match context.http().get_channel(ChannelId::new(id)).await {
+        Ok(ch) => {
+            if let Some(gc) = ch.guild() {
+                let _ = gc
+                    .send_message(context.http(), CreateMessage::new().content(log))
+                    .await;
+            }
+        }
+        Err(_) => return,
+    };
 }

@@ -32,3 +32,6 @@ result-*
 
 madamoiselle.toml
 *.db
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal

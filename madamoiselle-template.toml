@@ -10,3 +10,6 @@ requirement = 1
 emoji = []
 excluded_channels = []
 overrides = {}
+
+[modmail]
+roles = []

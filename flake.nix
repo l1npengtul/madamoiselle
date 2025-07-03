@@ -18,10 +18,9 @@
           inherit system;
           overlays = [rust-overlay.overlays.default];
         };
-        rustbin = pkgs.rust-bin.selectLatestNightlyWith (toolchain:
-          toolchain.default.override {
-            extensions = ["rust-src"];
-          });
+        rustbin = pkgs.rust-bin.stable.latest.default.override {
+                                  extensions = ["rust-src"];
+                              };
       in {
         formatter = pkgs.alejandra;
 
@@ -37,10 +36,13 @@
               rustPlatform.bindgenHook
               xmlstarlet
               rustup
+              sqlite
+              sqlx-cli
           ]);
 
           env.RUST_SRC_PATH = "${rustbin}/lib/rustlib/src/rust/library";
           env.LIBCLANG_PATH = "${pkgs.llvmPackages.libclang.lib}/lib";
+          env.DATABASE_URL = "sqlite://database.sqlite";
 
           shellHook = let
             pathToRustProject = "/project/component[@name='RustProjectSettings']";

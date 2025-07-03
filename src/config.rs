@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::time::Duration;
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -8,6 +7,7 @@ pub struct Config {
     pub discord: Discord,
     pub starboard: Starboard,
     pub places: Places,
+    pub modmail: Modmail,
 }
 
 #[derive(Clone, Default, Debug, Serialize, Deserialize)]
@@ -15,7 +15,7 @@ pub struct Places {
     // pub source_to_board_path: Option<PathBuf>,
     // pub board_to_source_path: Option<PathBuf>,
     // pub blacklist_path: Option<PathBuf>,
-    pub db_path: Option<PathBuf>,
+    pub db_path: Option<String>,
     // pub log_path: Option<PathBuf>,
 }
 
@@ -23,6 +23,15 @@ pub struct Places {
 pub struct Discord {
     pub token: Option<String>,
     pub status: Option<String>,
+}
+
+#[derive(Clone, Default, Debug, Serialize, Deserialize)]
+pub struct Modmail {
+    pub channel: Option<u64>,
+    pub bot_message: Option<u64>,
+    // pub auto_archive: bool,
+    pub roles: Vec<u64>,
+    pub log_channel: Option<u64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

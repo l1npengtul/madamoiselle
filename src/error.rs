@@ -1,6 +1,3 @@
-use redb::{
-    CommitError, CompactionError, DatabaseError, StorageError, TableError, TransactionError,
-};
 use serenity::all::EmojiParseError;
 use serenity::prelude::SerenityError;
 use std::fmt::{Display, Formatter};
@@ -8,51 +5,24 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    DatabaseError(DatabaseError),
+    DatabaseError(sqlx::Error),
     DatabaseCorrupted,
-    Transaction(TransactionError),
-    Table(TableError),
-    Storage(StorageError),
-    Compact(CompactionError),
-    Write(CommitError),
     Discord(SerenityError),
     SetConfigErr,
     BadEmojis(EmojiParseError),
     BadDuration(String),
+    BadUser,
+    BadTime,
+    BadStatus,
+    BadInteraction,
+    BadReason,
+    NotFound,
+    Invariant,
 }
 
-impl From<DatabaseError> for Error {
-    fn from(value: DatabaseError) -> Self {
+impl From<sqlx::Error> for Error {
+    fn from(value: sqlx::Error) -> Self {
         Self::DatabaseError(value)
-    }
-}
-
-impl From<TransactionError> for Error {
-    fn from(value: TransactionError) -> Self {
-        Self::Transaction(value)
-    }
-}
-
-impl From<TableError> for Error {
-    fn from(value: TableError) -> Self {
-        Self::Table(value)
-    }
-}
-
-impl From<StorageError> for Error {
-    fn from(value: StorageError) -> Self {
-        Self::Storage(value)
-    }
-}
-impl From<CompactionError> for Error {
-    fn from(value: CompactionError) -> Self {
-        Self::Compact(value)
-    }
-}
-
-impl From<CommitError> for Error {
-    fn from(value: CommitError) -> Self {
-        Self::Write(value)
     }
 }
 
