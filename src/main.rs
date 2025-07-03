@@ -1,3 +1,4 @@
+use std::env::{var, VarError};
 use crate::commands::{board, modmail, ping, register, stop};
 use crate::config::{Config, Override};
 use crate::database::Database;
@@ -146,8 +147,12 @@ impl UserData {
 async fn main() {
     env_logger::init();
 
+    let environment = match var("STATE_DIRECTORY") {
+        Ok(s) => format!("{s}/"),
+        Err(_) => "".to_string()
+    };
     let config: Config = Figment::new()
-        .merge(Toml::file("madamoiselle.toml"))
+        .merge(Toml::file(format!("{}madamoiselle.toml", environment)))
         .extract()
         .expect("Failed to read configuration file.");
 
