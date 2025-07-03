@@ -3,6 +3,7 @@ use crate::error::Error;
 use serenity::all::{ChannelId, UserId};
 use sqlx::{SqlitePool, query, Sqlite, Pool};
 use std::str::FromStr;
+use log::warn;
 use sqlx::migrate::MigrateDatabase;
 
 type OriginalMessage = u64;
@@ -22,8 +23,9 @@ pub struct Database {
 
 impl Database {
     pub async fn new(address: String) -> Result<Self, Error> {
-        if !sqlx::Sqlite::database_exists(&address).await? {
-            sqlx::Sqlite::create_database(&address).await?
+        if !Sqlite::database_exists(&address).await? {
+            warn!("creating database at {}", address);
+            Sqlite::create_database(&address).await?
         }
         let database = SqlitePool::connect(&address).await?;
         Ok(Self { database })
