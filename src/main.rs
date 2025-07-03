@@ -157,6 +157,7 @@ async fn main() {
         .clone()
         .unwrap_or_else(|| "database.sqlite".to_string());
 
+    info!("database path: {}", database_db_path);
     let user_data = Arc::new(UserData {
         database: Database::new(database_db_path).await.unwrap(),
         config: RwLock::new(config),
