@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\nINSERT INTO message_map VALUES ( ?1, ?2 )\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "86f576f3f8172c89e74cd428e8f0e06bcb02dacc4ec405cbae8943f03ab64c1b"
+}

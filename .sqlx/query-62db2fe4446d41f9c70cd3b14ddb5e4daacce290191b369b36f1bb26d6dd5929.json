@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "\nDELETE FROM message_map WHERE message_map.board_id = ?1\n",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "62db2fe4446d41f9c70cd3b14ddb5e4daacce290191b369b36f1bb26d6dd5929"
+}
