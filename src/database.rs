@@ -28,6 +28,9 @@ impl Database {
             Sqlite::create_database(&address).await?
         }
         let database = SqlitePool::connect(&address).await?;
+        sqlx::migrate!()
+            .run(&database)
+            .await.expect("Failed to run DB Migrations");
         Ok(Self { database })
     }
 
