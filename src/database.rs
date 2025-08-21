@@ -1,7 +1,7 @@
 use crate::commands::modmail::{ModmailOpenReason, ModmailStatus, ModmailThread};
 use crate::error::Error;
 use serenity::all::{ChannelId, UserId};
-use sqlx::{SqlitePool, query, Sqlite, Pool};
+use sqlx::{SqlitePool, query, Sqlite};
 use std::str::FromStr;
 use log::warn;
 use sqlx::migrate::MigrateDatabase;

@@ -1,6 +1,6 @@
 [package]
 name = "madamoiselle"
-version = "0.2.6"
+version = "0.2.7"
 edition = "2024"
 
 [dependencies]
@@ -30,7 +30,7 @@ features = ["full"]
 
 [dependencies.figment]
 version = "0.10.19"
-features = ["toml"]
+features = ["toml", "env"]
 
 [dependencies.sqlx]
 version = "0.8.6"

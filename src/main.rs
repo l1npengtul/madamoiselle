@@ -1,4 +1,4 @@
-use std::env::{var, VarError};
+use std::env::var;
 use crate::commands::{board, modmail, ping, register, stop};
 use crate::config::{Config, Override};
 use crate::database::Database;
@@ -6,7 +6,7 @@ use crate::error::Error;
 use crate::error::Error::SetConfigErr;
 use crate::event::handle_event;
 use figment::Figment;
-use figment::providers::{Format, Toml};
+use figment::providers::{Format, Toml, Env};
 use log::{error, info, warn};
 use poise::{CreateReply, FrameworkError, FrameworkOptions, PrefixFrameworkOptions};
 use serenity::all::colours::css::{DANGER, WARNING};
@@ -153,6 +153,7 @@ async fn main() {
     };
     let config: Config = Figment::new()
         .merge(Toml::file(format!("{}madamoiselle.toml", environment)))
+        .merge(Env::prefixed("MADAMOISELLE_"))
         .extract()
         .expect("Failed to read configuration file.");
 
