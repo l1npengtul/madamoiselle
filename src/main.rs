@@ -1,9 +1,7 @@
-use std::env::var;
 use crate::commands::{board, modmail, ping, register, stop};
 use crate::config::{Config, Override};
 use crate::database::Database;
 use crate::error::Error;
-use crate::error::Error::SetConfigErr;
 use crate::event::handle_event;
 use figment::Figment;
 use figment::providers::{Format, Toml, Env};
@@ -17,8 +15,6 @@ use serenity::all::{
 use serenity::cache::Settings;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
 use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::RwLock;
@@ -122,22 +118,26 @@ impl UserData {
     }
 
     pub async fn write_config_to_disk(&self) -> Result<(), Error> {
-        warn!("getting current config");
-        let config = match toml::to_string(&self.config.read().await.clone()) {
-            Ok(cfg) => cfg,
-            Err(why) => {
-                error!("error getting config: {}", why);
-                return Err(SetConfigErr);
-            }
-        };
-        warn!("writing new file");
-        let mut file = File::create("madamoiselle.toml")
-            .await
-            .map_err(|_| SetConfigErr)?;
-        warn!("writing data to file");
-        file.write_all(config.as_bytes())
-            .await
-            .map_err(|_| SetConfigErr)?;
+        // warn!("getting current config");        
+        // let config = match toml::to_string(&self.config.read().await.clone()) {
+        //     Ok(cfg) => cfg,
+        //     Err(why) => {
+        //         error!("error getting config: {}", why);
+        //         return Err(SetConfigErr);
+        //     }
+        // };
+        // warn!("writing new file");
+        // let mut file = File::create("madamoiselle.toml")
+        //     .await
+        //     .map_err(|_| SetConfigErr)?;
+        // warn!("writing data to file");
+        // file.write_all(config.as_bytes())
+        //     .await
+        //     .map_err(|_| SetConfigErr)?;
+
+        // Since we now declariatively manage our cfg with nix
+        // this is no longer needed
+        // TODO: proper filtering of config
 
         Ok(())
     }
@@ -147,25 +147,17 @@ impl UserData {
 async fn main() {
     env_logger::init();
 
-    let environment = match var("STATE_DIRECTORY") {
-        Ok(s) => format!("{s}/"),
-        Err(_) => "".to_string()
-    };
-    let config: Config = Figment::new()
-        .merge(Toml::file(format!("{}madamoiselle.toml", environment)))
+    let config: Config = Figment::new()    
+        .merge(Toml::file("/etc/madamoiselle.toml"))
         .merge(Env::prefixed("MADAMOISELLE_"))
         .extract()
         .expect("Failed to read configuration file.");
 
-    let database_db_path = config
-        .places
-        .db_path
-        .clone()
-        .unwrap_or_else(|| "database.sqlite".to_string());
-
-    info!("database path: {}", database_db_path);
+    let database_db_path = "/var/lib/madamoiselle/madamoiselle.db";
+    
+    info!("database path: {database_db_path}");
     let user_data = Arc::new(UserData {
-        database: Database::new(database_db_path).await.unwrap(),
+        database: Database::new(database_db_path.to_string()).await.unwrap(),
         config: RwLock::new(config),
         shard_manager: RwLock::new(None),
     });
