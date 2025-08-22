@@ -401,7 +401,7 @@ pub async fn mark_resolved(
                 .audit_log_reason("Moderator request thread mark as close"),
         )
         .await?;
-    
+
     log_channel(
         context.serenity_context(),
         context.data(),

@@ -1,4 +1,4 @@
-use crate::commands::{board, modmail, ping, register, stop, ban, };
+use crate::commands::{board, modmail, ping, register, stop};
 use crate::config::{Config, Override};
 use crate::database::Database;
 use crate::error::Error;
