@@ -4,7 +4,7 @@ use crate::database::Database;
 use crate::error::Error;
 use crate::event::handle_event;
 use figment::Figment;
-use figment::providers::{Env, Format, Toml};
+use figment::providers::{Format, Toml};
 use log::{error, info, warn};
 use poise::{CreateReply, FrameworkError, FrameworkOptions, PrefixFrameworkOptions};
 use serenity::all::colours::css::{DANGER, WARNING};
@@ -155,7 +155,7 @@ async fn main() {
     let database_db_path = "/var/lib/madamoiselle/madamoiselle.db";
     // horrible hack
     // but its 5am and idc anymore
-    let madamoiselle_token = Ok(std::env::var("MADAMOISELLE_DISCORD_TOKEN");
+    let madamoiselle_token = std::env::var("MADAMOISELLE_DISCORD_TOKEN").ok();
     config.discord.token = madamoiselle_token;
 
     warn!("{:?}", config.discord.token);
