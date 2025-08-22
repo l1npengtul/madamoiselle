@@ -4,7 +4,7 @@ use crate::database::Database;
 use crate::error::Error;
 use crate::event::handle_event;
 use figment::Figment;
-use figment::providers::{Format, Toml, Env};
+use figment::providers::{Env, Format, Toml};
 use log::{error, info, warn};
 use poise::{CreateReply, FrameworkError, FrameworkOptions, PrefixFrameworkOptions};
 use serenity::all::colours::css::{DANGER, WARNING};
@@ -118,7 +118,7 @@ impl UserData {
     }
 
     pub async fn write_config_to_disk(&self) -> Result<(), Error> {
-        // warn!("getting current config");        
+        // warn!("getting current config");
         // let config = match toml::to_string(&self.config.read().await.clone()) {
         //     Ok(cfg) => cfg,
         //     Err(why) => {
@@ -147,14 +147,15 @@ impl UserData {
 async fn main() {
     env_logger::init();
 
-    let config: Config = Figment::new()    
+    let config: Config = Figment::new()
         .merge(Toml::file("/etc/madamoiselle.toml"))
         .merge(Env::prefixed("MADAMOISELLE_"))
         .extract()
         .expect("Failed to read configuration file.");
 
     let database_db_path = "/var/lib/madamoiselle/madamoiselle.db";
-    
+
+    warn!("{:?}", config.discord.token);
     info!("database path: {database_db_path}");
     let user_data = Arc::new(UserData {
         database: Database::new(database_db_path.to_string()).await.unwrap(),
@@ -163,8 +164,6 @@ async fn main() {
     });
 
     let user_data2 = user_data.clone();
-
-    warn!("{}", config.discord.token);
 
     let poise = poise::Framework::builder()
         .options(FrameworkOptions {

@@ -1,10 +1,10 @@
 use crate::commands::modmail::{ModmailOpenReason, ModmailStatus, ModmailThread};
 use crate::error::Error;
-use serenity::all::{ChannelId, UserId};
-use sqlx::{SqlitePool, query, Sqlite};
-use std::str::FromStr;
 use log::warn;
+use serenity::all::{ChannelId, UserId};
 use sqlx::migrate::MigrateDatabase;
+use sqlx::{Sqlite, SqlitePool, query};
+use std::str::FromStr;
 
 type OriginalMessage = u64;
 type BoardMessage = u64;
@@ -30,7 +30,8 @@ impl Database {
         let database = SqlitePool::connect(&address).await?;
         sqlx::migrate!()
             .run(&database)
-            .await.expect("Failed to run DB Migrations");
+            .await
+            .expect("Failed to run DB Migrations");
         Ok(Self { database })
     }
 
