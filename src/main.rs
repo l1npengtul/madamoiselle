@@ -164,6 +164,8 @@ async fn main() {
 
     let user_data2 = user_data.clone();
 
+    warn!("{}", config.discord.token);
+
     let poise = poise::Framework::builder()
         .options(FrameworkOptions {
             commands: vec![
