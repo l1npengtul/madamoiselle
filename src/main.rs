@@ -1,4 +1,4 @@
-use crate::commands::{board, modmail, ping, register, stop};
+use crate::commands::{board, modmail, ping, register, stop, ban, };
 use crate::config::{Config, Override};
 use crate::database::Database;
 use crate::error::Error;
@@ -158,8 +158,6 @@ async fn main() {
     let madamoiselle_token = std::env::var("MADAMOISELLE_DISCORD_TOKEN").ok();
     config.discord.token = madamoiselle_token;
 
-    warn!("{:?}", config.discord.token);
-    info!("database path: {database_db_path}");
     let user_data = Arc::new(UserData {
         database: Database::new(database_db_path.to_string()).await.unwrap(),
         config: RwLock::new(config),
