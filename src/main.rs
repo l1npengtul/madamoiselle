@@ -147,13 +147,16 @@ impl UserData {
 async fn main() {
     env_logger::init();
 
-    let config: Config = Figment::new()
+    let mut config: Config = Figment::new()
         .merge(Toml::file("/etc/madamoiselle.toml"))
-        .merge(Env::prefixed("MADAMOISELLE_"))
         .extract()
         .expect("Failed to read configuration file.");
 
     let database_db_path = "/var/lib/madamoiselle/madamoiselle.db";
+    // horrible hack
+    // but its 5am and idc anymore
+    let madamoiselle_token = Ok(std::env::var("MADAMOISELLE_DISCORD_TOKEN");
+    config.discord.token = madamoiselle_token;
 
     warn!("{:?}", config.discord.token);
     info!("database path: {database_db_path}");
