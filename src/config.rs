@@ -15,7 +15,7 @@ pub struct Places {
     // pub source_to_board_path: Option<PathBuf>,
     // pub board_to_source_path: Option<PathBuf>,
     // pub blacklist_path: Option<PathBuf>,
-    pub db_path: Option<String>,
+    pub db_path: String,
     // pub log_path: Option<PathBuf>,
 }
 

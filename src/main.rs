@@ -10,15 +10,19 @@ use poise::{CreateReply, FrameworkError, FrameworkOptions, PrefixFrameworkOption
 use serenity::all::colours::css::{DANGER, WARNING};
 use serenity::all::{
     ActivityData, CacheHttp, ChannelId, ClientBuilder, Context, CreateEmbed, CreateEmbedFooter,
-    CreateMessage, GatewayIntents, Mentionable, OnlineStatus, ShardManager,
+    CreateMessage, GatewayIntents, Mentionable, MessageId, OnlineStatus, ShardManager,
 };
 use serenity::cache::Settings;
+use serenity::futures::channel::mpsc::UnboundedReceiver;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::select;
 use tokio::signal::unix::{SignalKind, signal};
 use tokio::sync::RwLock;
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
+use tokio::time::Instant;
 
+mod board_update;
 pub mod commands;
 mod config;
 mod database;
@@ -29,6 +33,9 @@ pub struct UserData {
     database: Database,
     config: RwLock<Config>,
     shard_manager: RwLock<Option<Arc<ShardManager>>>,
+    send_msg_to_chk: UnboundedSender<MessageId>,
+    recv_msg_to_chk: UnboundedReceiver<MessageId>,
+    last_checked_time: Instant,
 }
 
 impl UserData {
@@ -151,17 +158,18 @@ async fn main() {
         .merge(Toml::file("/etc/madamoiselle.toml"))
         .extract()
         .expect("Failed to read configuration file.");
-
-    let database_db_path = "/var/lib/madamoiselle/madamoiselle.db";
-    // horrible hack
-    // but its 5am and idc anymore
     let madamoiselle_token = std::env::var("MADAMOISELLE_DISCORD_TOKEN").ok();
     config.discord.token = madamoiselle_token;
 
+    let (board_checker_snd, board_checker_recv) = unbounded_channel();
+
     let user_data = Arc::new(UserData {
-        database: Database::new(database_db_path.to_string()).await.unwrap(),
+        database: Database::new(config.places.db_path.to_string())
+            .await
+            .unwrap(),
         config: RwLock::new(config),
         shard_manager: RwLock::new(None),
+        send_msg_to_chk: board_checker_snd,
     });
 
     let user_data2 = user_data.clone();
@@ -289,7 +297,7 @@ async fn pre_post_command<U>(context: poise::Context<'_, U, Error>, pre: bool) {
 
 async fn error_wrapper<U>(error: FrameworkError<'_, U, error::Error>) {
     if let Err(why) = error_handler(error).await {
-        error!("Failed to handle error: {:?}", why)
+        error!("Failed to handle error: {why:?}")
     }
 }
 
@@ -447,11 +455,8 @@ async fn error_handler<U>(error: FrameworkError<'_, U, error::Error>) -> Result<
             warn!("User hit cooldown with {:?}", ctx.invocation_string());
 
             ctx.send(
-
                 CreateReply::default()
-
                     .embed(
-
                         CreateEmbed::new()
 
                             .title("Cooldown hit")
