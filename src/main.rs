@@ -1,11 +1,13 @@
 use crate::commands::{board, modmail, ping, register, stop};
-use crate::config::{Config, Override};
+use crate::config::{Config, Discord, GlobalConfig, GuildConfig, Override};
 use crate::database::Database;
 use crate::error::Error;
 use crate::event::handle_event;
+use dashmap::DashMap;
 use figment::Figment;
 use figment::providers::{Format, Toml};
 use log::{error, info, warn};
+use poise::serenity_prelude::GuildId;
 use poise::{CreateReply, FrameworkError, FrameworkOptions, PrefixFrameworkOptions};
 use serenity::all::colours::css::{DANGER, WARNING};
 use serenity::all::{
@@ -28,6 +30,16 @@ mod config;
 mod database;
 mod error;
 mod event;
+
+mod banner;
+mod modmail;
+mod starboard;
+
+pub struct UserData2 {
+    database: Database,
+    bot_config: GlobalConfig,
+    guild_config: DashMap<GuildId, GuildConfig>,
+}
 
 pub struct UserData {
     database: Database,

@@ -1,5 +1,5 @@
-use serenity::all::EmojiParseError;
-use serenity::prelude::SerenityError;
+use poise::serenity_prelude::EmojiIdentifierParseError;
+use poise::serenity_prelude::Error as SerenityError;
 use std::fmt::{Display, Formatter};
 use thiserror::Error;
 
@@ -9,7 +9,7 @@ pub enum Error {
     DatabaseCorrupted,
     Discord(SerenityError),
     SetConfigErr,
-    BadEmojis(EmojiParseError),
+    BadEmojis(EmojiIdentifierParseError),
     BadDuration(String),
     BadUser,
     BadTime,
@@ -18,6 +18,7 @@ pub enum Error {
     BadReason,
     NotFound,
     Invariant,
+    CorruptRecord(String),
 }
 
 impl From<sqlx::Error> for Error {
@@ -26,7 +27,7 @@ impl From<sqlx::Error> for Error {
     }
 }
 
-impl From<serenity::Error> for Error {
+impl From<poise::serenity_prelude::Error> for Error {
     fn from(value: SerenityError) -> Self {
         Self::Discord(value)
     }
